@@ -228,4 +228,317 @@
     'intergient.com',
     'doubleclick.net',
     'googlesyndication.com',
-    'imasdk.
+    'imasdk.googleapis.com',
+    'googleads.g.doubleclick.net',
+    'adtrafficquality.google'
+  ];
+
+  function isBlockedAdUrl(url) {
+    if (!url || typeof url !== 'string') return false;
+    const lower = url.toLowerCase();
+    return BLOCKED_SCRIPT_PATTERNS.some(function(pat) { return lower.includes(pat); });
+  }
+
+  try {
+    const origCreateElement = document.createElement.bind(document);
+    document.createElement = function(tagName, options) {
+      const el = origCreateElement(tagName, options);
+      if (typeof tagName === 'string' && tagName.toLowerCase() === 'script') {
+        let blockedSrc = '';
+        const origSetAttr = el.setAttribute.bind(el);
+        el.setAttribute = function(name, value) {
+          if (String(name).toLowerCase() === 'src' && isBlockedAdUrl(String(value))) {
+            blockedSrc = String(value);
+            origSetAttr('data-blocked-ad-src', blockedSrc);
+            setTimeout(function() {
+              if (typeof el.onload === 'function') {
+                try { el.onload(new Event('load')); } catch (_) {}
+              }
+              try { el.dispatchEvent(new Event('load')); } catch (_) {}
+            }, 0);
+            return;
+          }
+          return origSetAttr(name, value);
+        };
+        try {
+          const srcDesc = Object.getOwnPropertyDescriptor(HTMLScriptElement.prototype, 'src');
+          if (srcDesc && srcDesc.set) {
+            Object.defineProperty(el, 'src', {
+              get: function() { return blockedSrc || srcDesc.get.call(this); },
+              set: function(val) {
+                if (isBlockedAdUrl(String(val))) {
+                  blockedSrc = String(val);
+                  origSetAttr('data-blocked-ad-src', blockedSrc);
+                  setTimeout(function() {
+                    if (typeof el.onload === 'function') {
+                      try { el.onload(new Event('load')); } catch (_) {}
+                    }
+                    try { el.dispatchEvent(new Event('load')); } catch (_) {}
+                  }, 0);
+                  return;
+                }
+                return srcDesc.set.call(this, val);
+              },
+              configurable: true
+            });
+          }
+        } catch (_) {}
+      }
+      return el;
+    };
+  } catch (_) {}
+
+  // 3. Force window.open for game launch (/run-site/) to navigate in the current tab
+  try {
+    const origWindowOpen = window.open;
+    window.open = function(url, target, features) {
+      const urlStr = url ? String(url) : '';
+      if (urlStr.includes('/run-site')) {
+        window.location.href = urlStr;
+        return window;
+      }
+      if (urlStr === 'about:blank') {
+        const fakeWin = {
+          closed: false,
+          opener: null,
+          close: function() { this.closed = true; },
+          focus: function() {},
+          location: {
+            _href: 'about:blank',
+            get href() { return this._href; },
+            set href(v) {
+              this._href = v;
+              if (v && v !== 'about:blank') {
+                window.location.href = v;
+              }
+            }
+          }
+        };
+        return fakeWin;
+      }
+      return origWindowOpen ? origWindowOpen.apply(this, arguments) : null;
+    };
+  } catch (_) {}
+
+  // 4. WebRTC DataChannel Kickout & AdBlock-Penalty Suppressor
+  try {
+    if (typeof RTCPeerConnection !== 'undefined') {
+      const origCreateDc = RTCPeerConnection.prototype.createDataChannel;
+      RTCPeerConnection.prototype.createDataChannel = function(label, options) {
+        const dc = origCreateDc.apply(this, arguments);
+        try { window.__cm_dc = dc; } catch (_) {}
+        return dc;
+      };
+    }
+  } catch (_) {}
+
+  try {
+    if (typeof RTCDataChannel !== 'undefined' && RTCDataChannel.prototype.send) {
+      const origDcSend = RTCDataChannel.prototype.send;
+      RTCDataChannel.prototype.send = function(data) {
+        if (typeof data === 'string' && data.startsWith('adBlock>')) {
+          data = 'adBlock>false';
+        }
+        return origDcSend.call(this, data);
+      };
+    }
+  } catch (_) {}
+
+  const origAddEventListener = window.addEventListener;
+  window.addEventListener = function(type, listener, options) {
+    if (type === 'webrtc-dc-message') {
+      const wrapped = function(e) {
+        if (e && typeof e.detail === 'string') {
+          if (e.detail.startsWith('kickout>') || e.detail.includes('kickout') || e.detail.startsWith('noTime') || e.detail.includes('time_up')) {
+            console.warn('[CloudMoon Unlimited] Blocked kickout signal:', e.detail);
+            if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+            return;
+          }
+        }
+        return listener.apply(this, arguments);
+      };
+      return origAddEventListener.call(this, type, wrapped, options);
+    }
+    return origAddEventListener.apply(this, arguments);
+  };
+
+  try {
+    const origOnMessage = Object.getOwnPropertyDescriptor(RTCDataChannel.prototype, 'onmessage');
+    if (origOnMessage && origOnMessage.set) {
+      Object.defineProperty(RTCDataChannel.prototype, 'onmessage', {
+        set: function(fn) {
+          const wrapped = function(ev) {
+            if (ev && typeof ev.data === 'string' && (ev.data.startsWith('kickout>') || ev.data.includes('kickout'))) {
+              console.warn('[CloudMoon Unlimited] Dropped kickout DataChannel message:', ev.data);
+              return;
+            }
+            return fn.apply(this, arguments);
+          };
+          return origOnMessage.set.call(this, wrapped);
+        },
+        get: origOnMessage.get,
+        configurable: true
+      });
+    }
+  } catch (e) {}
+
+  try {
+    const origDcAddEventListener = RTCDataChannel.prototype.addEventListener;
+    RTCDataChannel.prototype.addEventListener = function(type, listener, options) {
+      if (type === 'message') {
+        const wrapped = function(ev) {
+          if (ev && typeof ev.data === 'string' && (ev.data.startsWith('kickout>') || ev.data.includes('kickout'))) {
+            console.warn('[CloudMoon Unlimited] Dropped kickout DataChannel event listener message:', ev.data);
+            return;
+          }
+          return listener.apply(this, arguments);
+        };
+        return origDcAddEventListener.call(this, type, wrapped, options);
+      }
+      return origDcAddEventListener.apply(this, arguments);
+    };
+  } catch (e) {}
+
+  // 5. Inactivity keepalive, interaction listener & periodic background reward refill
+  try {
+    let lastActivityDispatch = 0;
+    const reportActivity = function() {
+      const now = Date.now();
+      if (now - lastActivityDispatch > 5000) {
+        lastActivityDispatch = now;
+        try {
+          window.dispatchEvent(new CustomEvent('webrtc-dc-send', { detail: 'touch>input_activity' }));
+        } catch (_) {}
+      }
+    };
+    ['keydown', 'keyup', 'mousedown', 'mouseup', 'mousemove', 'wheel', 'touchstart', 'touchmove', 'pointerdown'].forEach(function(evType) {
+      window.addEventListener(evType, reportActivity, { passive: true, capture: true });
+    });
+
+    setInterval(function() {
+      try {
+        window.dispatchEvent(new CustomEvent('webrtc-dc-send', { detail: 'touch>keepalive' }));
+      } catch (_) {}
+    }, 15000);
+
+    setInterval(function() {
+      try {
+        const s = window.__cm_session;
+        if (s && s.token) {
+          fetch('/cloudmoon/api/web/ad', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-User-Token': s.token
+            },
+            body: JSON.stringify({ game: s.game || 'com.roblox.client' })
+          }).catch(function() {});
+        }
+      } catch (_) {}
+    }, 45000);
+
+    if ((window.location.pathname || '').startsWith('/run-site')) {
+      const isExitAllowed = function() {
+        return !!window.__cm_intentional_exit;
+      };
+      try {
+        const origAssign = window.location.assign;
+        if (origAssign) {
+          window.location.assign = function(url) {
+            const u = String(url || '');
+            if (!isExitAllowed() && (u === '/' || u === '/cloudmoon/' || u.startsWith(window.location.origin + '/cloudmoon'))) {
+              console.warn('[CloudMoon Unlimited] Intercepted auto-navigation to home:', u);
+              return;
+            }
+            return origAssign.apply(this, arguments);
+          };
+        }
+      } catch (_) {}
+    }
+  } catch (_) {}
+
+  // 6. WebSocket Wrapper
+  try {
+    const OrigWebSocket = window.WebSocket;
+    const WrappedWebSocket = function(url, protocols) {
+      let urlStr = String(url || '');
+      if (urlStr.includes('html-load.cc') || urlStr.includes('ad-shield')) {
+        const dummy = Object.create(OrigWebSocket.prototype);
+        dummy.readyState = 3;
+        dummy.close = function() {};
+        dummy.send = function() {};
+        dummy.addEventListener = function() {};
+        dummy.removeEventListener = function() {};
+        return dummy;
+      }
+      if (urlStr.includes('__sh_ws_host=')) {
+        try {
+          const parsed = new URL(urlStr);
+          const targetHost = parsed.searchParams.get('__sh_ws_host');
+          if (targetHost) {
+            parsed.searchParams.delete('__sh_ws_host');
+            parsed.pathname = '/cloudmoon/ws-proxy/' + targetHost + parsed.pathname;
+            urlStr = parsed.toString();
+          }
+        } catch (_) {}
+      }
+      return protocols !== undefined ? new OrigWebSocket(urlStr, protocols) : new OrigWebSocket(urlStr);
+    };
+    WrappedWebSocket.prototype = OrigWebSocket.prototype;
+    window.WebSocket = WrappedWebSocket;
+  } catch (_) {}
+
+  // 7. Global fetch interceptor
+  const origFetch = window.fetch;
+  window.fetch = async function(resource, init) {
+    let url = typeof resource === 'string' ? resource : (resource instanceof Request ? resource.url : String(resource));
+
+    if (url.includes('api.ip.sb/geoip')) {
+      return new Response(JSON.stringify({
+        ip: '127.0.0.1',
+        country_code: 'JP',
+        country: 'Japan',
+        timezone: 'Asia/Tokyo'
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+
+    if (isBlockedAdUrl(url)) {
+      return new Response('/* ad blocked */', { status: 200, headers: { 'Content-Type': 'application/javascript' } });
+    }
+
+    const API_HOSTS = [
+      'https://api.prod.cloudmoonapp.com',
+      'https://api.cloudmoon.cloudbatata.com',
+      'https://api.prod.geometry.today',
+      'https://hrz5zfjq02.execute-api.us-east-1.amazonaws.com',
+      'https://api.prod.viewoncloud.com'
+    ];
+    for (let i = 0; i < API_HOSTS.length; i++) {
+      if (url.includes(API_HOSTS[i])) {
+        url = url.replace(API_HOSTS[i], window.location.origin + '/cloudmoon/api');
+      }
+    }
+
+    if (url.endsWith('/_ping')) {
+      return new Response(JSON.stringify({ code: 0, message: 'pong' }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+
+    if (resource instanceof Request) {
+      try { resource = new Request(url, resource); } catch (_) { resource = url; }
+    } else {
+      resource = url;
+    }
+
+    const doFetch = (r, i) => (i !== undefined ? origFetch.call(this, r, i) : origFetch.call(this, r));
+
+    if (url.includes('/web/ad')) {
+      return new Response(JSON.stringify({
+        code: 0,
+        message: 'Success',
+        data: { showAD: false, unlimit: false, timeSecLeft: 99999999, rewardAdPass: true, rewardHash: '', initOrientation: 3, adSource: '' }
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+
+    return doFetch(resource, init);
+  };
+})();
