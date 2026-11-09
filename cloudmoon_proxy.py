@@ -944,8 +944,8 @@ def _transform_html(html: str) -> str:
     html = html.replace('href="./main.css"', 'href="/run-site/main.css"')
     html = html.replace('href="./images/favicon.ico"', 'href="/run-site/images/favicon.ico"')
 
-   jsdelivr_url = "https://cdn.jsdelivr.net/gh/Ryon1206/cloudmoonpro@main/cm-engine.js"
-    inject = f'{_AD_FREE_CSS}<script src="{jsdelivr_url}"></script>'
+　　jsdelivr_url = "https://cdn.jsdelivr.net/gh/Ryon1206/cloudmoonpro@main/cm-engine.js"
+　　inject = f'{_AD_FREE_CSS}<script src="{jsdelivr_url}"></script>'
     if "<meta charset" in html.lower():
         idx = html.lower().find("<meta charset")
         end_tag = html.find(">", idx)
