@@ -1,17 +1,14 @@
 <svg xmlns="http://www.w3.org/2000/svg"
+     xmlns:xhtml="http://www.w3.org/1999/xhtml"
      width="100%" height="100%">
 
   <foreignObject x="0" y="0" width="100%" height="100%">
-    <div xmlns="http://www.w3.org/1999/xhtml"
-         style="font-family:sans-serif;padding:30px">
-
-      <h1>CloudMoon TEST</h1>
-
-      <p id="message">読み込み中...</p>
-
-      <script src="https://cdn.jsdelivr.net/gh/Ryon1206/cloudmoonpro@main/test.js"></script>
-
-    </div>
+    <xhtml:div style="font-family:sans-serif;padding:30px">
+      <xhtml:h1>CloudMoon TEST</xhtml:h1>
+      <xhtml:p id="message">読み込み中...</xhtml:p>
+    </xhtml:div>
   </foreignObject>
+
+  <script href="https://cdn.jsdelivr.net/gh/Ryon1206/cloudmoonpro@main/test.js"></script>
 
 </svg>
