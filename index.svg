@@ -1,8 +1,23 @@
-＜svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%"＞
-＜foreignObject width="100%" height="100%"＞
-＜div xmlns="http://www.w3.org/1999/xhtml" style="width:100%; height:100%; margin:0; padding:0; background:#0b0f19; overflow:hidden;"＞
-＜iframe id="app-frame" src="https://cloudmoonpro-8.onrender.com/cloudmoon/" width="100%" height="100%" style="border:none; width:100%; height:100%;"＞＜/iframe＞
-＜script src="https://cdn.jsdelivr.net/gh/Ryon1206/cloudmoonpro@main/cm-engine.js"＞＜/script＞
-＜/div＞
-＜/foreignObject＞
-＜/svg＞
+<svg xmlns="http://www.w3.org/2000/svg"
+     xmlns:xhtml="http://www.w3.org/1999/xhtml"
+     width="100%" height="100%">
+
+  <foreignObject width="100%" height="100%">
+    <xhtml:div style="
+      width:100%;
+      height:100%;
+      margin:0;
+      padding:24px;
+      box-sizing:border-box;
+      background:#0b0f19;
+      color:white;
+      font-family:sans-serif;
+    ">
+      <xhtml:h1>Webアプリ</xhtml:h1>
+      <xhtml:p id="message">Renderに接続中...</xhtml:p>
+    </xhtml:div>
+  </foreignObject>
+
+  <script href="https://cdn.jsdelivr.net/gh/Ryon1206/ryon-api-test@main/test.js"
+          type="application/ecmascript"/>
+</svg>
